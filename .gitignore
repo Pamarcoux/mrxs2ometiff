@@ -3,5 +3,6 @@ MRXS/
 bioformats2raw-0.12.0/
 raw2ometiff-0.10.0/
 __pycache__/
-verification/.ref/
-verification/results/
+verification/
+mrxs2ometiff.py
+conversion.sh

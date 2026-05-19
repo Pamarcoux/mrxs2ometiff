@@ -1,7 +1,0 @@
-slide,method,real_sec,peak_mb,output_size
-295209_PM_PatientCevi040534-Panel2_Glofi2-1,mrxs2ometiff.py,18.8,6865,855.9 MiB
-295209_PM_PatientCevi040534-Panel2_Glofi2-1,bioformats2raw+raw2ometiff,29.9,6680,767.9 MiB
-295182_PM_PatientCevi040534-Panel1_UT1.1,mrxs2ometiff.py,21.4,7290,710.6 MiB
-295182_PM_PatientCevi040534-Panel1_UT1.1,bioformats2raw+raw2ometiff,41.7,9868,686.9 MiB
-295199_PM_PatientCevi040534-Panel2_UT1-1,mrxs2ometiff.py,24.7,8579,1.1 GiB
-295199_PM_PatientCevi040534-Panel2_UT1-1,bioformats2raw+raw2ometiff,54.3,8832,1.0 GiB

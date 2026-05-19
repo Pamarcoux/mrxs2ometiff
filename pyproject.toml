@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "mrxs2ometiff"
+version = "0.1.0"
+description = "Convert MRXS whole-slide images to 16-bit OME-TIFF"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "LGPL-2.1-only"}
+dependencies = [
+    "numpy",
+    "tifffile",
+    "imagecodecs",
+]
+
+[project.urls]
+Source = "https://github.com/paulmarcoux/mrxs2ometiff"
+
+[project.scripts]
+mrxs2ometiff = "mrxs2ometiff.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
