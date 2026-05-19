@@ -1,0 +1,80 @@
+Metadata-Version: 2.4
+Name: mrxs2ometiff
+Version: 0.1.0
+Summary: Convert MRXS whole-slide images to 16-bit OME-TIFF
+License: LGPL-2.1-only
+Project-URL: Source, https://github.com/paulmarcoux/mrxs2ometiff
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: numpy
+Requires-Dist: tifffile
+Requires-Dist: imagecodecs
+
+# mrxs2ometiff — MRXS to OME-TIFF converter
+
+Convert 3DHistech MRXS (MIRAX) whole-slide images to 16-bit OME-TIFF.
+
+Python-native alternative to the bioformats2raw + raw2ometiff Java pipeline.
+No Java or intermediate Zarr files required.
+
+## Features
+
+- 4-channel 16-bit OME-TIFF output
+- Reads all filter levels (no loss of channels stored on FilterLevel_1)
+- OME metadata (PhysicalSize, channel names, excitation/emission wavelengths)
+- BigTIFF with zlib compression
+- Single-step conversion
+
+## Limitations
+
+- Full-resolution only (no pyramid levels in output)
+- Tile overlap is not composited — raw tile positions are used
+- RAM usage is proportional to the total image pixel count
+- MRXS format only (not SVS, NDPI, etc.)
+- Streaming tile writer not yet implemented (large slides may require > 16 GB RAM)
+
+## Installation
+
+```bash
+pip install mrxs2ometiff
+```
+
+Requires Python ≥ 3.9 with numpy, tifffile, and imagecodecs.
+
+## Usage
+
+```bash
+# Single slide
+mrxs2ometiff slide.mrxs -o slide.ome.tif
+
+# Batch convert all .mrxs in a directory
+mrxs2ometiff MRXS_DIR/
+
+# Verify an existing OME-TIFF
+mrxs2ometiff slide.ome.tif --verify
+```
+
+## Performance
+
+| Slide | Tiles | mrxs2ometiff | bioformats2raw + raw2ometiff |
+|---|---|---|---|
+| Panel2_Glofi2-1 | 226 | 19 s | 30 s |
+| Panel1_UT1.1 | 238 | 21 s | 42 s |
+| Panel2_UT1-1 | 276 | 25 s | 54 s |
+
+Peak memory: ~7–9 GB (both pipelines). Measured on an Intel workstation with NVMe SSD.
+Conversion time varies with tile count and image dimensions.
+
+## How it works
+
+1. Parse Slidedat.ini for channel definitions, zoom levels, and camera parameters
+2. Parse Index.dat to locate tile records across all hierarchical levels
+3. Read tile (x, y) positions from VIMSLIDE_POSITION_BUFFER or StitchingIntensityLayer
+4. Decode JPEG-XR tiles and place them at their absolute coordinates
+5. Write a 16-bit multi-channel BigTIFF with OME-XML metadata
+
+Tile positioning follows the same logic as OpenSlide's MIRAX reader.
+
+## License
+
+LGPL-2.1-only

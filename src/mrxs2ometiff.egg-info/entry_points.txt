@@ -1,0 +1,2 @@
+[console_scripts]
+mrxs2ometiff = mrxs2ometiff.cli:main

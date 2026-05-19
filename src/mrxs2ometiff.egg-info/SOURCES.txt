@@ -1,0 +1,14 @@
+README.md
+pyproject.toml
+src/mrxs2ometiff/__init__.py
+src/mrxs2ometiff/__main__.py
+src/mrxs2ometiff/cli.py
+src/mrxs2ometiff/convert.py
+src/mrxs2ometiff/reader.py
+src/mrxs2ometiff/verify.py
+src/mrxs2ometiff.egg-info/PKG-INFO
+src/mrxs2ometiff.egg-info/SOURCES.txt
+src/mrxs2ometiff.egg-info/dependency_links.txt
+src/mrxs2ometiff.egg-info/entry_points.txt
+src/mrxs2ometiff.egg-info/requires.txt
+src/mrxs2ometiff.egg-info/top_level.txt

@@ -32,36 +32,29 @@ Requires Python ≥ 3.9 with numpy, tifffile, and imagecodecs.
 ## Usage
 
 ```bash
-# Single slide
+# Single slide — specify output path
 mrxs2ometiff slide.mrxs -o slide.ome.tif
 
-# Batch convert all .mrxs in a directory
+# Batch mode — convert all .mrxs in a directory
+# Output TIFFs are written to ./TIFF/ with the same base names
 mrxs2ometiff MRXS_DIR/
 
-# Verify an existing OME-TIFF
-mrxs2ometiff slide.ome.tif --verify
+# Verify an existing OME-TIFF (dimensions, pixel ranges, OME metadata)
+mrxs2ometiff output.ome.tif --verify
+mrxs2ometiff TIFF/ --verify     # verify a directory of TIFFs
 ```
 
-## Performance
+### Default output path
 
-| Slide | Tiles | mrxs2ometiff | bioformats2raw + raw2ometiff |
-|---|---|---|---|
-| Panel2_Glofi2-1 | 226 | 19 s | 30 s |
-| Panel1_UT1.1 | 238 | 21 s | 42 s |
-| Panel2_UT1-1 | 276 | 25 s | 54 s |
+When `-o` is omitted with a single file, the output is written to `../TIFF/`
+relative to the slide directory (one level above the `MRXS/` directory).
 
-Peak memory: ~7–9 GB (both pipelines). Measured on an Intel workstation with NVMe SSD.
-Conversion time varies with tile count and image dimensions.
+### What the converter does
 
-## How it works
-
-1. Parse Slidedat.ini for channel definitions, zoom levels, and camera parameters
-2. Parse Index.dat to locate tile records across all hierarchical levels
-3. Read tile (x, y) positions from VIMSLIDE_POSITION_BUFFER or StitchingIntensityLayer
-4. Decode JPEG-XR tiles and place them at their absolute coordinates
-5. Write a 16-bit multi-channel BigTIFF with OME-XML metadata
-
-Tile positioning follows the same logic as OpenSlide's MIRAX reader.
+1. Reads `Slidedat.ini` and `Index.dat` from the MRXS directory
+2. Parses tile records and camera position maps
+3. Decodes JPEG-XR tiles and places them at their absolute pixel coordinates
+4. Writes a 16-bit multi-channel BigTIFF with OME-XML metadata
 
 ## License
 
