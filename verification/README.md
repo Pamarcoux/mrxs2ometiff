@@ -48,6 +48,11 @@ while our converter computes a tight bounding box from tile positions. The DAPI 
 confirms that `bioformats2raw` (via Bio-Formats' `MiraxReader`) suffers from the FilterLevel_1
 bug that our converter fixes.
 
+## Speed benchmark
+
+See [BENCHMARK.md](BENCHMARK.md) for timing results. Our converter is **~2× faster**
+on average (single-pass Python vs 2-pass Java pipeline).
+
 ## Limitations
 
 - The reference pipeline (`bioformats2raw`) generates its own pyramid; our converter
