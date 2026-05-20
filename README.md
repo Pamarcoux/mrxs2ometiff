@@ -39,7 +39,7 @@ Other differences:
 ## Installation
 
 ```bash
-pip install git+https://github.com/paulmarcoux/mrxs2ometiff
+pip install git+https://github.com/Pamarcoux/mrxs2ometiff
 ```
 
 Requires Python ≥ 3.9 with `numpy`, `tifffile`, and [imagecodecs](https://github.com/cgohlke/imagecodecs) (for JPEG-XR decode and zlib compression).

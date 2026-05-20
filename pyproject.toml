@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.urls]
-Source = "https://github.com/paulmarcoux/mrxs2ometiff"
+Source = "https://github.com/Pamarcoux/mrxs2ometiff"
 
 [project.scripts]
 mrxs2ometiff = "mrxs2ometiff.cli:main"
