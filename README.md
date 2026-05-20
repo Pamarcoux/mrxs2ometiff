@@ -3,13 +3,13 @@
 Convert 3DHistech MRXS (MIRAX) whole-slide images to 16-bit OME-TIFF with multi-resolution pyramids.
 
 Python-native, single-step alternative to the `bioformats2raw + raw2ometiff` Java pipeline.
-Reads **all filter levels** (including `FilterLevel_1` which Java drops) and preserves excitation/emission wavelengths.
+Reads **all filter levels** and preserves excitation/emission wavelengths.
 
 ## Features
 
 - **Single-step conversion** — no Java, no intermediate Zarr files
 - **Multi-resolution OME-TIFF** — 8-level pyramid sub-IFDs (like raw2ometiff)
-- **All channels preserved** — reads both `FilterLevel_0` and `FilterLevel_1` (Java can't read the latter)
+- **All channels preserved** — reads both `FilterLevel_0` and `FilterLevel_1`
 - **Full OME metadata** — channel names, excitation/emission wavelengths, physical pixel size
 - **Streaming via memmap** — memory usage ~3.7 GB regardless of slide size
 - **Multi-threaded decode** — JPEG-XR tile decoding runs in parallel (8 workers, ~4× speedup)
@@ -20,73 +20,29 @@ Reads **all filter levels** (including `FilterLevel_1` which Java drops) and pre
 
 | Metric | `mrxs2ometiff` | `bioformats2raw + raw2ometiff` |
 |---|---|---|
-| **Single slide** (295182, 4 ch) | **36.5 s** / 3.7 GB | 39.2 s / 6.4 GB |
-| **Single slide, no pyramids** | **5.1 s** / 2.8 GB | — |
-| **Batch 20 slides** | **7 min 22 s** | 13 min 08 s (estimated) |
-| **Output size** | 0.8–1.8 GB (tight bounds) | ~4.0 GB (padded to 21504×17212) |
-| **Ch3 (FilterLevel_1)** | ✅ Correct (max=49k, mean=120) | ❌ Garbage (max=12, mean=9.5) |
-| **Ex/Em wavelengths** | ✅ Preserved | ❌ Lost |
-| **Channel order** | ✅ Correct | ❌ Ch0↔Ch2 swapped |
+| **Batch 20 slides** | **~20 s / slide** | ~40 s / slide |
+| **Output size** | 0.8–1.8 GB (tight bounds) | ~4.0 GB (padded) |
+| **Ex/Em wavelengths** | ✅ Preserved | Lost |
 
-### Per-slide breakdown (our tool, with pyramids)
+Tested on Linux, 64 GB RAM, NVMe SSD.
 
-| Slide | Time (s) | Output (GB) | Dimensions |
-|---|---|---|---|
-| 295182 P1 UT1.1 | 22.2 | 1.0 | 10380×8286 |
-| 295183 P1 UT1.2 | 22.0 | 1.0 | 10376×8280 |
-| 295184 P1 GA1.1 | 23.0 | 1.1 | 10584×8564 |
-| 295185 P1 GA1.2 | 23.3 | 1.1 | 10556×8564 |
-| 295186 P1 UT2.1 | 22.4 | 1.1 | 10388×8498 |
-| 295187 P1 UT2.2 | 22.5 | 1.1 | 10388×8498 |
-| 295188 P1 Glofi1.1 | 21.9 | 1.0 | 10416×8356 |
-| 295189 P1 Glofi1.2 | 21.8 | 1.0 | 10420×8356 |
-| 295199 P2 UT1-1 | 22.4 | 1.2 | 10752×8686 |
-| 295200 P2 UT1-2 | 22.0 | 1.1 | 10488×8690 |
-| 295201 P2 GA1-1 | 21.5 | 1.2 | 10752×8798 |
-| 295202 P2 GA1-2 | 22.3 | 1.2 | 10828×8798 |
-| 295203 P2 GA2-1 | 22.1 | 1.2 | 10752×8826 |
-| 295204 P2 GA2-2 | 22.3 | 1.2 | 10760×8826 |
-| 295205 P2 UT2-1 | 22.4 | 1.2 | 10752×8798 |
-| 295206 P2 UT2-2 | 22.5 | 1.2 | 10752×8798 |
-| 295207 P2 Glofi1-1 | 22.0 | 1.0 | 10484×8356 |
-| 295208 P2 Glofi1-2 | 21.2 | 1.1 | 10488×8356 |
-| 295209 P2 Glofi2-1 | 21.5 | 0.8 | 9074×7716 |
-| 295210 P2 Glofi2-2 | 21.0 | 0.9 | 9800×7808 |
+## Differences with the Java pipeline
 
-### Hardware
+The standard `bioformats2raw + raw2ometiff` pipeline does not handle all the features of the MRXS format. In particular, slides with more than 3 channels can store data on multiple filter levels — the Java pipeline only reads `FilterLevel_0`, so any channels stored on `FilterLevel_1` are lost or garbled. Our tool reads all filter levels and preserves every channel correctly.
 
-- CPU: (auto-detected, 8+ cores)
-- RAM: 64 GB+
-- Disk: NVMe SSD
-- OS: Linux
+Other differences:
 
-## Why not just use Java?
-
-The standard `bioformats2raw + raw2ometiff` pipeline has **three confirmed bugs** on these slides:
-
-1. **FilterLevel_1 channels are garbage.** Channel 3 (stored on `FilterLevel_1`) decodes to max=12, mean≈9.5 across all 20 slides. Our tool reads it correctly (max up to 65,535, mean 78–471 depending on slide).
-
-2. **Channel reordering.** Channels 0 and 2 (both on `FilterLevel_0`) are swapped — the Java pipeline writes `storing_ch=2` data into the channel-0 position and vice versa.
-
-3. **Excitation/emission wavelengths lost.** Java outputs `ex="" em=""` for every channel; our tool records the full metadata from `Slidedat.ini`.
-
-Additionally, the Java pipeline pads images to tile-grid boundaries (21504×17212) producing ~4× larger files than necessary.
+- **Excitation/emission wavelengths** — Java outputs empty values while we keep the metadata from `Slidedat.ini`.
+- **Channel ordering** — the Java pipeline reorders some channels when reading from multiple filter levels.
+- **Output padding** — Java pads images to tile-grid boundaries (21504×17212), making files ~4× larger than needed.
 
 ## Installation
 
 ```bash
-pip install mrxs2ometiff
+pip install git+https://github.com/paulmarcoux/mrxs2ometiff
 ```
 
 Requires Python ≥ 3.9 with `numpy`, `tifffile`, and [imagecodecs](https://github.com/cgohlke/imagecodecs) (for JPEG-XR decode and zlib compression).
-
-For development:
-
-```bash
-git clone https://github.com/paulmarcoux/mrxs2ometiff
-cd mrxs2ometiff
-pip install -e ".[dev]"
-```
 
 ## Usage
 
@@ -156,7 +112,7 @@ DATA_IN_THIS_FILTER_LEVEL = FilterLevel_1   ← different filter level!
 STORING_CHANNEL_NUMBER = 0
 ```
 
-The key insight: **channels can span different filter levels**, stored as separate sections in `Index.dat`. Java's `bioformats2raw` only reads the first filter level, losing any channels stored on higher levels.
+**Channels can span different filter levels**, stored as separate sections in `Index.dat`.
 
 ### Pipeline
 
@@ -182,7 +138,7 @@ MRXS directory
 
 ### Channel ordering
 
-Channels are grouped by filter level (`FilterLevel_0` first, then `FilterLevel_1`), preserving the `filter_level` ordering from `Slidedat.ini`. Within each group, channels maintain their `storing_ch` index. This means the output channel order may differ from the Java pipeline (which reorders incorrectly — see bug #2 above).
+Channels are grouped by filter level (`FilterLevel_0` first, then `FilterLevel_1`), preserving the `filter_level` ordering from `Slidedat.ini`. Within each group, channels maintain their `storing_ch` index. This means the output channel order may differ from the Java pipeline.
 
 ### Pyramids
 
