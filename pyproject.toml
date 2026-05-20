@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mrxs2ometiff"
-version = "0.1.0"
+version = "2026.5.20"
 description = "Convert MRXS whole-slide images to 16-bit OME-TIFF"
 readme = "README.md"
 requires-python = ">=3.9"

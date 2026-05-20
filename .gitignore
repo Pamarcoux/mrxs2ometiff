@@ -6,3 +6,4 @@ __pycache__/
 verification/
 mrxs2ometiff.py
 conversion.sh
+*.egg-info/
