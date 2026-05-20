@@ -87,14 +87,10 @@ def _pyramid_levels(H, W):
     return levels
 
 
-def _downsample(src_mm, C, tmpdir):
+def _downsample(src_mm, C):
     C, H, W = src_mm.shape
     sh, sw = H // 2, W // 2
-    f = tempfile.NamedTemporaryFile(
-        dir=tmpdir, prefix='.pyr_', suffix='.raw', delete=False,
-    )
-    f.close()
-    pyr = np.memmap(f.name, dtype='uint16', mode='write', shape=(C, sh, sw))
+    pyr = np.empty((C, sh, sw), dtype=np.uint16)
     for y in range(0, sh, 1024):
         bh = min(1024, sh - y)
         src_block = np.array(
@@ -103,8 +99,7 @@ def _downsample(src_mm, C, tmpdir):
         pyr[:, y:y+bh, :] = (
             src_block.reshape(C, bh, 2, sw, 2).mean(axis=(2, 4)).astype(np.uint16)
         )
-    pyr.flush()
-    return f.name, pyr
+    return pyr
 
 
 def _ome_metadata(ch_list, pixel_size):
@@ -186,8 +181,6 @@ def convert_one(mrxs_path, output_path, pyramid=True):
     tmp_path = data_file.name
     data_file.close()
 
-    pyr_paths = []
-    pyr_mms = []
     try:
         mm = np.memmap(
             tmp_path, dtype='uint16', mode='write', shape=(C, img_h, img_w),
@@ -216,15 +209,15 @@ def convert_one(mrxs_path, output_path, pyramid=True):
             list(pool.map(decode_tile, tile_map.items()))
         mm.flush()
 
+        pyr_arrays = []
         if n_levels > 1:
             src = mm
             for level in range(1, n_levels):
                 pyr_h, pyr_w = src.shape[1] // 2, src.shape[2] // 2
                 print(f'  Pyramid level {level}: Y={pyr_h}, X={pyr_w}')
-                p_path, p_mm = _downsample(src, C, tmpdir)
-                pyr_paths.append(p_path)
-                pyr_mms.append(p_mm)
-                src = p_mm
+                pyr_arr = _downsample(src, C)
+                pyr_arrays.append(pyr_arr)
+                src = pyr_arr
 
         pixel_size = meta['zoom_info'][0]['px_x']
         ome_meta = _ome_metadata(ch_list, pixel_size)
@@ -236,15 +229,17 @@ def convert_one(mrxs_path, output_path, pyramid=True):
                 subifds=n_levels - 1,
                 photometric='minisblack',
                 compression='zlib',
+                compressionargs={'level': 6},
                 metadata=ome_meta,
             )
-            for pyr_mm in pyr_mms:
+            for pyr_arr in pyr_arrays:
                 tif.write(
-                    data=pyr_mm,
+                    data=pyr_arr,
                     tile=(1024, 1024),
                     subfiletype=1,
                     photometric='minisblack',
                     compression='zlib',
+                    compressionargs={'level': 1},
                 )
 
         size_gb = output_path.stat().st_size / 1e9
@@ -252,8 +247,5 @@ def convert_one(mrxs_path, output_path, pyramid=True):
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
-        for p in pyr_paths:
-            if os.path.exists(p):
-                os.unlink(p)
 
     return True
