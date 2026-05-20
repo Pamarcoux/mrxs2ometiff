@@ -144,7 +144,7 @@ Channels are grouped by filter level (`FilterLevel_0` first, then `FilterLevel_1
 
 When `--no-pyramid` is not set, the converter generates additional resolution levels by 2×2 block averaging of the previous level, stopping when both dimensions are ≤ 256 pixels. Each level is written as a sub-IFD in the BigTIFF, compatible with OME-TIFF consumers (Napari, QuPath, OMERO, etc.).
 
-Levels are generated sequentially: each level is downsampled from the level above, written to a temporary memmap file, and linked as a sub-IFD. Temp files are cleaned up after the full TIFF is written.
+Levels are generated sequentially: each level is downsampled from the level above into an in-memory array, then written directly as a sub-IFD.
 
 ### Memory streaming
 
@@ -153,7 +153,7 @@ Rather than loading all tiles into a Python list and assembling in-memory (which
 1. Creates a temp file for the full-resolution array
 2. Opens it as a writable `numpy.memmap` in CHW format (C×H×W, uint16)
 3. Decodes tiles in parallel, each writing directly to its memmap region
-4. Reads from memmap during pyramid generation
+4. Reads from memmap (or in-memory arrays) during pyramid generation
 
 This keeps peak RSS at ~3.7 GB (mostly the JPEG-XR decoder buffers and Python overhead) regardless of slide size. The memmap file is automatically cleaned up on completion.
 
