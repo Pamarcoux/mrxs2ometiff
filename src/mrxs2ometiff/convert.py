@@ -167,7 +167,7 @@ def convert_one(mrxs_path, output_path, pyramid=True):
     gb = C * img_h * img_w * 2 / 1e9
     print(
         f'  Full res: C={C}, Y={img_h}, X={img_w} '
-        f'({gb:.1f} GB raw, blended via temp files)'
+        f'({gb:.1f} GB raw, streamed via temp file)'
     )
     if n_levels > 1:
         print(f'  Pyramids: {n_levels - 1} additional levels')
@@ -181,18 +181,9 @@ def convert_one(mrxs_path, output_path, pyramid=True):
     tmp_path = data_file.name
     data_file.close()
 
-    count_file = tempfile.NamedTemporaryFile(
-        dir=tmpdir, prefix=f'.{output_path.stem}_cnt_', suffix='.raw', delete=False,
-    )
-    count_path = count_file.name
-    count_file.close()
-
     try:
         mm = np.memmap(
             tmp_path, dtype='uint16', mode='write', shape=(C, img_h, img_w),
-        )
-        count_mm = np.memmap(
-            count_path, dtype='uint8', mode='write', shape=(C, img_h, img_w),
         )
 
         data_files = meta['data_files']
@@ -217,23 +208,9 @@ def convert_one(mrxs_path, output_path, pyramid=True):
                 if th <= 0 or tw <= 0:
                     continue
                 for ch_idx, storing_ch in channels:
-                    cnt_ch = count_mm[ch_idx, dy:dy+th, dx:dx+tw]
-                    if np.all(cnt_ch == 0):
-                        mm[ch_idx, dy:dy+th, dx:dx+tw] = tile[:th, :tw, storing_ch]
-                    else:
-                        tile_ch = tile[:th, :tw, storing_ch]
-                        existing = mm[ch_idx, dy:dy+th, dx:dx+tw].astype(np.uint32)
-                        tile_u32 = tile_ch.astype(np.uint32)
-                        cnt = cnt_ch.astype(np.uint32)
-                        mm[ch_idx, dy:dy+th, dx:dx+tw] = np.where(
-                            cnt == 0, tile_ch,
-                            ((existing * cnt + tile_u32 + (cnt + 1) // 2) // (cnt + 1)).astype(np.uint16)
-                        )
-                    count_mm[ch_idx, dy:dy+th, dx:dx+tw] = cnt_ch + 1
+                    mm[ch_idx, dy:dy+th, dx:dx+tw] = tile[:th, :tw, storing_ch]
 
         mm.flush()
-        del count_mm
-        os.unlink(count_path)
 
         pyr_arrays = []
         if n_levels > 1:
@@ -273,7 +250,5 @@ def convert_one(mrxs_path, output_path, pyramid=True):
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)
-        if os.path.exists(count_path):
-            os.unlink(count_path)
 
     return True
