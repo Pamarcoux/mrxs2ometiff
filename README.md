@@ -11,7 +11,8 @@ Reads **all filter levels** and preserves excitation/emission wavelengths.
 - **Multi-resolution OME-TIFF** — 8-level pyramid sub-IFDs (like raw2ometiff)
 - **All channels preserved** — reads both `FilterLevel_0` and `FilterLevel_1`
 - **Full OME metadata** — channel names, excitation/emission wavelengths, physical pixel size
-- **Streaming via memmap** — memory usage ~3.7 GB regardless of slide size
+- **Tile registration + linear blending** — NCC-based cross-correlation (±16 px range) corrects tile-to-tile misalignment at horizontal seams; linear alpha ramp blends overlap regions for seamless stitching
+- **Streaming via memmap** — memory usage ~3.9 GB regardless of slide size
 - **Multi-threaded decode** — JPEG-XR tile decoding runs in parallel (8 workers, ~4× speedup)
 - **No padding** — output dimensions match the slide's tight bounding box (no waste)
 - **16-bit zlib-compressed BigTIFF** — ready for downstream analysis
@@ -20,7 +21,8 @@ Reads **all filter levels** and preserves excitation/emission wavelengths.
 
 | Metric | `mrxs2ometiff` | `bioformats2raw + raw2ometiff` |
 |---|---|---|
-| **Batch 20 slides** | **~20 s / slide** | ~40 s / slide |
+| **Batch 20 slides (with pyramid)** | **~40 s / slide** | ~40 s / slide (excl. Zarr→TIFF conversion) |
+| **Single slide (no pyramid)** | **~22 s** | — |
 | **Output size** | 0.8–1.8 GB (tight bounds) | ~4.0 GB (padded) |
 | **Ex/Em wavelengths** | ✅ Preserved | Lost |
 
@@ -127,10 +129,16 @@ MRXS directory
   _build_tile_index()   → tile_map: pixel coordinate → channel list
        │
        ▼
-  memmap (CHW format)   → decode_tile() writes each tile at its absolute position
-       │
-       ▼
-  _downsample() × N     → generate pyramid levels via 2×2 block averaging
+   memmap (CHW format)   → decode_tile() writes each tile at its grid position
+        │
+        ▼
+   _register_overlap()   → NCC cross-correlation at horizontal seams (prev_dy-cor- rected exist_band), tile_shift cached for FL1 reuse
+        │
+        ▼
+   _blend_horiz/vert()   → linear alpha ramp over overlap region, saved before over- write
+        │
+        ▼
+   _downsample() × N     → generate pyramid levels via 2×2 block averaging
        │
        ▼
   TiffWriter.write()    → BigTIFF with sub-IFDs + OME-XML metadata
@@ -161,12 +169,25 @@ This keeps peak RSS at ~3.7 GB (mostly the JPEG-XR decoder buffers and Python ov
 
 Tiles are JPEG-XR compressed and stored in `.dat` files. The `Index.dat` page-linked lists map each tile to `(data_file, offset, size)`. Camera position data (from `VIMSLIDE_POSITION_BUFFER` or `StitchingIntensityLayer`) gives the absolute pixel coordinate for each grid position.
 
-Tile overlap is recorded in the metadata but not composited — tiles are placed at their recorded positions; overlapping regions will contain the last-written tile's data (no blending). This matches Java's behavior.
+The stride (tile spacing) is read from the `StitchingLayer` metadata when available, falling back to a median over neighbour differences from the camera position grid.
+
+### Tile registration and blending
+
+Adjacent tiles have an overlap of ~112 pixels (derived from `tile_w - stride_x`). A normalized cross-correlation (NCC) scan over ±16 pixels finds the vertical alignment shift between each tile and its left neighbour:
+
+1. A vertical strip of the overlap region is extracted from both the current tile (`new_band`) and the existing memmap (`exist_band`).
+2. The `exist_band` is read at the **previous tile's actual vertical position** (`prev_dy`, tracked per tile via `tile_dy`) rather than the current tile's grid `dy` — otherwise a previous vertical shift would introduce zeros in the band, corrupting the correlation.
+3. The best NCC shift is stored in `tile_shift` for `FilterLevel_0` tiles and reused by `FilterLevel_1` tiles at the same grid position, ensuring all four channels stay aligned.
+4. The tile is placed at `dy += shift_v` and written to the memmap.
+
+Before overwriting the overlap region, the existing content is saved. A linear alpha ramp (`np.linspace(0, 1, overlap)`) blends the saved content (old tile) with the incoming tile, creating a seamless transition. The same process applies vertically for top-neighbour overlaps.
+
+Registration runs only between tiles that actually exist as neighbours (`(gx-1, gy) in tile_coords`), preventing spurious correlations against background at tissue edges.
 
 ## Limitations
 
 - MRXS format only (not SVS, NDPI, CZI, etc.)
-- Tile overlap is not composited (matching Java's behavior)
+- Horizontal-seam registration only corrects vertical shift; horizontal drift at horizontal seams is absorbed by the 112 px blend (typically <5 px, invisible in practice)
 - JPEG-XR dependency (`imagecodecs` via `glymur`) — requires `libjpegxr` on Linux
 
 ## License
