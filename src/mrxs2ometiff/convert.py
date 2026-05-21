@@ -366,7 +366,7 @@ def convert_one(mrxs_path, output_path, pyramid=True):
                 if is_fl0:
                     shift_cache[(gx, gy)] = (shift_v, shift_h)
                 else:
-                    shift_v, shift_h = shift_cache.get((gx, gy), (0, 0))
+                    shift_v, shift_h = 0, 0  # FL1: grid position only, no shift
 
                 # Apply shift to placement
                 dy = dy_orig + shift_v
