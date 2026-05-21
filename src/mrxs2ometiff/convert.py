@@ -209,7 +209,10 @@ def _ome_metadata(ch_list, pixel_size):
 
 def convert_one(mrxs_path, output_path, pyramid=True):
     mrxs_path = Path(mrxs_path)
-    slide_dir = mrxs_path.with_suffix('')
+    if mrxs_path.is_dir():
+        slide_dir = mrxs_path
+    else:
+        slide_dir = mrxs_path.with_suffix('')
     output_path = Path(output_path)
 
     print(f'\n=== Converting: {mrxs_path.name} ===')
@@ -366,7 +369,7 @@ def convert_one(mrxs_path, output_path, pyramid=True):
                 if is_fl0:
                     shift_cache[(gx, gy)] = (shift_v, shift_h)
                 else:
-                    shift_v, shift_h = 0, 0  # FL1: grid position only, no shift
+                    shift_v, shift_h = shift_cache.get((gx, gy), (0, 0))
 
                 # Apply shift to placement
                 dy = dy_orig + shift_v
