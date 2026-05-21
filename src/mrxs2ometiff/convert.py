@@ -316,8 +316,6 @@ def convert_one(mrxs_path, output_path, pyramid=True):
         else:
             print('  Registration disabled (no valid stride or small overlap)')
 
-        shift_cache = {}
-
         with ThreadPoolExecutor(max_workers=8) as pool:
             for key, ch_data, tile in pool.map(decode_tile, sorted_items):
                 _, _, _, py, px, gx, gy = key
@@ -329,44 +327,37 @@ def convert_one(mrxs_path, output_path, pyramid=True):
                 if th <= 0 or tw <= 0:
                     continue
 
-                is_fl0 = any(fl == 'FilterLevel_0' for _, _, fl in ch_data)
-
                 shift_v = 0
                 shift_h = 0
 
-                if is_fl0:
-                    if do_register and overlap_x > 0 and overlap_y > 0:
-                        ref_ch = ch_data[0][1]
-                        # --- Horizontal overlap (left neighbor) ---
-                        if dx > 0:
-                            overlap_w = min(overlap_x, tw, dx)
-                            if overlap_w >= 8:
-                                new_band = tile[:th, :overlap_w, ref_ch]
-                                exist_band = mm[ref_ch, dy_orig:dy_orig+th,
-                                                dx:dx+overlap_w]
-                                if (new_band.shape == exist_band.shape
-                                        and new_band.size > 0):
-                                    shift_v = _register_overlap(
-                                        new_band, exist_band, max_shift=4
-                                    )
+                if do_register and overlap_x > 0 and overlap_y > 0:
+                    ref_ch = ch_data[0][1]
+                    # --- Horizontal overlap (left neighbor) ---
+                    if dx > 0:
+                        overlap_w = min(overlap_x, tw, dx)
+                        if overlap_w >= 8:
+                            new_band = tile[:th, :overlap_w, ref_ch]
+                            exist_band = mm[ref_ch, dy_orig:dy_orig+th,
+                                            dx:dx+overlap_w]
+                            if (new_band.shape == exist_band.shape
+                                    and new_band.size > 0):
+                                shift_v = _register_overlap(
+                                    new_band, exist_band, max_shift=4
+                                )
 
-                        # --- Vertical overlap (top neighbor) ---
-                        if dy_orig > 0:
-                            overlap_h = min(overlap_y, th, dy_orig)
-                            if overlap_h >= 8:
-                                new_band = tile[:overlap_h, :tw, ref_ch]
-                                exist_band = mm[ref_ch,
-                                                dy_orig:dy_orig+overlap_h,
-                                                dx:dx+tw]
-                                if (new_band.shape == exist_band.shape
-                                        and new_band.size > 0):
-                                    shift_h = _register_overlap(
-                                        new_band.T, exist_band.T, max_shift=4
-                                    )
-
-                    shift_cache[(gx, gy)] = (shift_v, shift_h)
-                else:
-                    shift_v, shift_h = shift_cache.get((gx, gy), (0, 0))
+                    # --- Vertical overlap (top neighbor) ---
+                    if dy_orig > 0:
+                        overlap_h = min(overlap_y, th, dy_orig)
+                        if overlap_h >= 8:
+                            new_band = tile[:overlap_h, :tw, ref_ch]
+                            exist_band = mm[ref_ch,
+                                            dy_orig:dy_orig+overlap_h,
+                                            dx:dx+tw]
+                            if (new_band.shape == exist_band.shape
+                                    and new_band.size > 0):
+                                shift_h = _register_overlap(
+                                    new_band.T, exist_band.T, max_shift=4
+                                )
 
                 # Apply shift to placement
                 dy = dy_orig + shift_v
@@ -383,7 +374,7 @@ def convert_one(mrxs_path, output_path, pyramid=True):
                     tile_ch = tile[:th, :tw, storing_ch]
 
                     saved = {}
-                    if do_register and is_fl0:
+                    if do_register:
                         # Save existing overlap regions before overwrite
                         if dx > 0 and overlap_x >= 8:
                             ow = min(overlap_x, tw, dx)
@@ -403,7 +394,7 @@ def convert_one(mrxs_path, output_path, pyramid=True):
                     # Write full tile
                     mm[ch_idx, dy:dy+th, dx:dx+tw] = tile_ch
 
-                    # Blend overlaps (FL0 only)
+                    # Blend overlaps
                     if 'h' in saved:
                         ow, exist = saved['h']
                         blended = _blend_horiz(exist, tile_ch[:, :ow])
