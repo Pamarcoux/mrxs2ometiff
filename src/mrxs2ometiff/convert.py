@@ -316,6 +316,8 @@ def convert_one(mrxs_path, output_path, pyramid=True):
         else:
             print('  Registration disabled (no valid stride or small overlap)')
 
+        shift_cache = {}
+
         with ThreadPoolExecutor(max_workers=8) as pool:
             for key, ch_data, tile in pool.map(decode_tile, sorted_items):
                 _, _, _, py, px, gx, gy = key
@@ -327,10 +329,12 @@ def convert_one(mrxs_path, output_path, pyramid=True):
                 if th <= 0 or tw <= 0:
                     continue
 
+                is_fl0 = any(fl == 'FilterLevel_0' for _, _, fl in ch_data)
+
                 shift_v = 0
                 shift_h = 0
 
-                if do_register and overlap_x > 0 and overlap_y > 0:
+                if is_fl0 and do_register and overlap_x > 0 and overlap_y > 0:
                     ref_ch = ch_data[0][1]
                     # --- Horizontal overlap (left neighbor) ---
                     if dx > 0:
@@ -359,6 +363,11 @@ def convert_one(mrxs_path, output_path, pyramid=True):
                                     new_band.T, exist_band.T, max_shift=4
                                 )
 
+                if is_fl0:
+                    shift_cache[(gx, gy)] = (shift_v, shift_h)
+                else:
+                    shift_v, shift_h = shift_cache.get((gx, gy), (0, 0))
+
                 # Apply shift to placement
                 dy = dy_orig + shift_v
                 if dy < 0:
@@ -374,7 +383,7 @@ def convert_one(mrxs_path, output_path, pyramid=True):
                     tile_ch = tile[:th, :tw, storing_ch]
 
                     saved = {}
-                    if do_register:
+                    if is_fl0 and do_register:
                         # Save existing overlap regions before overwrite
                         if dx > 0 and overlap_x >= 8:
                             ow = min(overlap_x, tw, dx)
@@ -394,7 +403,7 @@ def convert_one(mrxs_path, output_path, pyramid=True):
                     # Write full tile
                     mm[ch_idx, dy:dy+th, dx:dx+tw] = tile_ch
 
-                    # Blend overlaps
+                    # Blend overlaps (FL0 only)
                     if 'h' in saved:
                         ow, exist = saved['h']
                         blended = _blend_horiz(exist, tile_ch[:, :ow])
