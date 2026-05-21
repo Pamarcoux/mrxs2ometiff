@@ -23,6 +23,7 @@ def parse_ini(ini_path):
     tile_w = int(config['LAYER_0_LEVEL_0_SECTION']['DIGITIZER_WIDTH'])
     tile_h = int(config['LAYER_0_LEVEL_0_SECTION']['DIGITIZER_HEIGHT'])
     image_divisions = int(g.get('CameraImageDivisionsPerSide', 1))
+    camera_rotation = float(g.get('CAMERA_ROTATION', 0))
 
     zoom_info = {}
     for z in range(zoom_levels):
@@ -64,8 +65,65 @@ def parse_ini(ini_path):
         'filter_level_count': filter_level_count,
         'datafile_count': len(data_files),
         'level_0_image_concat': 1 << zoom_info[0]['concat_exponent'],
+        'camera_rotation': camera_rotation,
         'hierarchy': h,
     }
+
+
+def read_stitching_layer(slide_dir, meta):
+    """Read stride values from StitchingLayer.
+
+    Returns (stride_x, stride_y) or None.
+    """
+    h = meta['hierarchy']
+    nonhier_count = int(h.get('nonhier_count', 0))
+
+    ei = 0
+    found = False
+    for i in range(nonhier_count):
+        name = h.get(f'nonhier_{i}_name', '')
+        count = int(h.get(f'nonhier_{i}_count', 0))
+        if name == 'StitchingLayer':
+            found = True
+            break
+        ei += count
+
+    if not found:
+        return None
+
+    index_path = slide_dir / 'Index.dat'
+    with open(index_path, 'rb') as f:
+        f.read(5)
+        f.read(len(meta['slide_id']))
+        hier_base = struct.unpack('<i', f.read(4))[0]
+        nonhier_base = struct.unpack('<i', f.read(4))[0]
+        f.seek(nonhier_base + ei * 4)
+        ptr = struct.unpack('<i', f.read(4))[0]
+        if ptr <= 0:
+            return None
+        f.seek(ptr)
+        first_page = struct.unpack('<i', f.read(8)[4:8])[0]
+        f.seek(first_page)
+        n_items = struct.unpack('<i', f.read(4))[0]
+        f.read(12)
+        ref_offset = struct.unpack('<i', f.read(4))[0]
+        ref_length = struct.unpack('<i', f.read(4))[0]
+        ref_file = struct.unpack('<i', f.read(4))[0]
+
+    df_path = slide_dir / f'Data{ref_file:04d}.dat'
+    if not df_path.exists():
+        return None
+
+    with open(df_path, 'rb') as df:
+        df.seek(ref_offset)
+        data = df.read(ref_length)
+
+    if len(data) < 28:
+        return None
+
+    stride_x = struct.unpack_from('<H', data, 10)[0]
+    stride_y = struct.unpack_from('<H', data, 26)[0]
+    return stride_x, stride_y
 
 
 def read_tile_positions(slide_dir, meta):
