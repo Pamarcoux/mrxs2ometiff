@@ -29,8 +29,14 @@ def main():
         mrxs_dir = input_path
         output_dir = mrxs_dir.parent / 'TIFF'
         output_dir.mkdir(parents=True, exist_ok=True)
-        for f in sorted(mrxs_dir.glob('*.mrxs')):
-            out = output_dir / f.with_suffix('.ome.tif').name
+        slides = sorted(mrxs_dir.glob('*.mrxs'))
+        if not slides:
+            slides = sorted([
+                d for d in mrxs_dir.iterdir()
+                if d.is_dir() and (d / 'Slidedat.ini').exists()
+            ])
+        for f in slides:
+            out = output_dir / (f.with_suffix('').stem + '.ome.tif')
             convert_one(f, out, pyramid=pyramid)
     else:
         if args.output:
