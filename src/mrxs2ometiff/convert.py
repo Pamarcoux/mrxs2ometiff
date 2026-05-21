@@ -154,7 +154,7 @@ def _build_tile_index(meta, records, fl_map, fl_order, tile_positions,
             max_x = max(max_x, px + tile_w)
             max_y = max(max_y, py + tile_h)
 
-            key = (off, sz, fn, py, px)
+            key = (off, sz, fn, py, px, gx, gy)
             for ci, ch in enumerate(ch_group):
                 tile_map[key].append((base_idx + ci, ch['storing_ch'], fl_name))
 
@@ -292,7 +292,7 @@ def convert_one(mrxs_path, output_path, pyramid=True):
 
         def decode_tile(item):
             key, ch_data = item
-            off, sz, fn, py, px = key
+            off, sz, fn, py, px, gx, gy = key
             data_path = slide_dir / data_files[fn]
             with open(data_path, 'rb') as fh:
                 fh.seek(off)
@@ -316,9 +316,11 @@ def convert_one(mrxs_path, output_path, pyramid=True):
         else:
             print('  Registration disabled (no valid stride or small overlap)')
 
+        shift_cache = {}
+
         with ThreadPoolExecutor(max_workers=8) as pool:
             for key, ch_data, tile in pool.map(decode_tile, sorted_items):
-                _, _, _, py, px = key
+                _, _, _, py, px, gx, gy = key
                 dx = px - min_x
                 dy_orig = py - min_y
                 th, tw = tile.shape[:2]
@@ -332,34 +334,39 @@ def convert_one(mrxs_path, output_path, pyramid=True):
                 shift_v = 0
                 shift_h = 0
 
-                if do_register and is_fl0 and overlap_x > 0 and overlap_y > 0:
-                    ref_ch = ch_data[0][1]
-                    # --- Horizontal overlap (left neighbor) ---
-                    if dx > 0:
-                        overlap_w = min(overlap_x, tw, dx)
-                        if overlap_w >= 8:
-                            new_band = tile[:th, :overlap_w, ref_ch]
-                            exist_band = mm[ref_ch, dy_orig:dy_orig+th,
-                                            dx:dx+overlap_w]
-                            if (new_band.shape == exist_band.shape
-                                    and new_band.size > 0):
-                                shift_v = _register_overlap(
-                                    new_band, exist_band, max_shift=4
-                                )
+                if is_fl0:
+                    if do_register and overlap_x > 0 and overlap_y > 0:
+                        ref_ch = ch_data[0][1]
+                        # --- Horizontal overlap (left neighbor) ---
+                        if dx > 0:
+                            overlap_w = min(overlap_x, tw, dx)
+                            if overlap_w >= 8:
+                                new_band = tile[:th, :overlap_w, ref_ch]
+                                exist_band = mm[ref_ch, dy_orig:dy_orig+th,
+                                                dx:dx+overlap_w]
+                                if (new_band.shape == exist_band.shape
+                                        and new_band.size > 0):
+                                    shift_v = _register_overlap(
+                                        new_band, exist_band, max_shift=4
+                                    )
 
-                    # --- Vertical overlap (top neighbor) ---
-                    if dy_orig > 0:
-                        overlap_h = min(overlap_y, th, dy_orig)
-                        if overlap_h >= 8:
-                            new_band = tile[:overlap_h, :tw, ref_ch]
-                            exist_band = mm[ref_ch,
-                                            dy_orig:dy_orig+overlap_h,
-                                            dx:dx+tw]
-                            if (new_band.shape == exist_band.shape
-                                    and new_band.size > 0):
-                                shift_h = _register_overlap(
-                                    new_band.T, exist_band.T, max_shift=4
-                                )
+                        # --- Vertical overlap (top neighbor) ---
+                        if dy_orig > 0:
+                            overlap_h = min(overlap_y, th, dy_orig)
+                            if overlap_h >= 8:
+                                new_band = tile[:overlap_h, :tw, ref_ch]
+                                exist_band = mm[ref_ch,
+                                                dy_orig:dy_orig+overlap_h,
+                                                dx:dx+tw]
+                                if (new_band.shape == exist_band.shape
+                                        and new_band.size > 0):
+                                    shift_h = _register_overlap(
+                                        new_band.T, exist_band.T, max_shift=4
+                                    )
+
+                    shift_cache[(gx, gy)] = (shift_v, shift_h)
+                else:
+                    shift_v, shift_h = shift_cache.get((gx, gy), (0, 0))
 
                 # Apply shift to placement
                 dy = dy_orig + shift_v
